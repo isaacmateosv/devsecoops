@@ -1,0 +1,55 @@
+# Production translation of the restricted runner (services/runner/runner.py).
+# The same isolation profile recorded in each ExecutionRecord, expressed as a
+# hardened Kubernetes Job. One Job per execution; no network; non-root; no caps;
+# read-only root fs; resource-bounded. For arbitrary hostile uploads, schedule
+# onto a gVisor/Kata (`runtimeClassName`) node pool -- noted, not assumed.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: devsecoops-run-
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 15          # wall-clock timeout
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      # runtimeClassName: gvisor     # enable for strong isolation of hostile artifacts
+      containers:
+        - name: runner
+          image: debian:bookworm-slim
+          command: ["/art/program", "/in/input"]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            limits:
+              cpu: "1"
+              memory: "256Mi"
+          volumeMounts:
+            - { name: artifact, mountPath: /art, readOnly: true }
+            - { name: input, mountPath: /in, readOnly: true }
+            - { name: scratch, mountPath: /tmp }
+      volumes:
+        - { name: artifact, emptyDir: {} }   # populated read-only by an init copy in practice
+        - { name: input, emptyDir: {} }
+        - { name: scratch, emptyDir: { medium: Memory, sizeLimit: 16Mi } }
+---
+# NetworkPolicy denying all egress for runner pods (the k8s equivalent of
+# `--network none`). Requires a CNI that enforces NetworkPolicy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: devsecoops-runner-deny-all
+spec:
+  podSelector:
+    matchLabels: { app: devsecoops-runner }
+  policyTypes: ["Ingress", "Egress"]
+  ingress: []
+  egress: []

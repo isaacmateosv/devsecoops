@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html, body { background: #070b12; color: #e6edf6; }
+
+/* Smooth, meaningful motion (respect reduced-motion). */
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.act { animation: rise .5s ease both; }
+@media (prefers-reduced-motion: reduce) { .act { animation: none; } }
+
+/* Print / export: linearize everything, drop controls. */
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; color: #000; }
+  .act { animation: none; break-inside: avoid; border-color: #ccc !important; }
+  .panel, .panel2 { background: #fff !important; border: 1px solid #ccc !important; }
+}
+.react-flow__attribution { display: none; }

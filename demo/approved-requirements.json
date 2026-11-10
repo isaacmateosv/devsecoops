@@ -1,0 +1,21 @@
+{
+  "_comment": "Independently APPROVED financial requirements for the modern replacement. This is policy INPUT authored/approved by humans (not derived from the oracle, and not the legacy binary's behaviour). The modern service is built from this file; the private oracle independently checks the result (Track B). In production each approval requires a real signer; the entries below represent the POC's recorded policy decisions.",
+  "treaty": {
+    "type": "per_occurrence_excess_of_loss_single_layer",
+    "currency": "USD",
+    "attachment": "100000.00",
+    "limit": "500000.00",
+    "rounding": "half_up_to_cent"
+  },
+  "supported_subset": "Single-layer per-occurrence excess-of-loss recovery for one currency (USD), settled to the cent, for eligible_loss in [0, 1e12]. Explicitly OUT of scope: aggregate limits, reinstatements, currency conversion, complex claims adjustments, multi-layer towers.",
+  "approved_divergences": [
+    {
+      "id": "DIV-overflow",
+      "description": "Where the legacy binary overflows a 32-bit cents integer on large eligible losses and silently pays 0.00, the modern service pays the correct recovery (the limit cap). This is an intentional correction of a defect, not a compatibility match.",
+      "status": "approved",
+      "approved_by": "risk-policy-owner (POC record; production requires a named human signer)",
+      "linked_finding_class": "integer_overflow"
+    }
+  ],
+  "equivalence_disclaimer": "No claim of universal equivalence to the legacy binary is made. Verification covers only the tested cases and the supported subset above; results are evidence over the sampled inputs, not a mathematical proof of equivalence or of decompilation."
+}

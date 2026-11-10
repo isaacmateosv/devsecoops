@@ -1,0 +1,13 @@
+# API / orchestrator image. NOTE: to spawn hardened runner containers this image
+# would need access to a container runtime; in k8s the runner is a separate
+# isolated Job rather than docker-in-docker. Kept here for reproducibility.
+FROM python:3.12-slim
+WORKDIR /app
+COPY apps/api/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY packages /app/packages
+COPY services /app/services
+COPY apps/api /app/apps/api
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8000
+CMD ["python", "-m", "uvicorn", "app:app", "--app-dir", "/app/apps/api", "--host", "0.0.0.0", "--port", "8000"]

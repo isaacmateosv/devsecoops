@@ -1,0 +1,13 @@
+# Modern replacement service (Prompt 4). Self-contained; no DB, no legacy binary.
+FROM python:3.12-slim
+WORKDIR /app
+RUN pip install --no-cache-dir "fastapi>=0.115" "uvicorn[standard]>=0.30" "pydantic>=2.7"
+COPY packages/financial /app/packages/financial
+COPY demo/approved-requirements.json /app/demo/approved-requirements.json
+COPY apps/modern /app/apps/modern
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8001
+# runs as non-root
+RUN useradd -m svc
+USER svc
+CMD ["python", "-m", "uvicorn", "app:app", "--app-dir", "/app/apps/modern", "--host", "0.0.0.0", "--port", "8001"]

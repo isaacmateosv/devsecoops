@@ -1,0 +1,38 @@
+# DevSecOops local stack.
+#
+# Postgres is the durable provenance store. The API orchestrator runs on the
+# host (so it can spawn hardened sibling runner containers without granting a
+# container access to the Docker socket). See infra/k8s/ for the production
+# translation, where the runner is an isolated Job and the API a Deployment.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: devsecoops
+      POSTGRES_PASSWORD: devsecoops
+      POSTGRES_DB: devsecoops
+    ports:
+      - "5433:5432"   # 5433 on host to avoid clashing with a local postgres
+    volumes:
+      - devsecoops_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devsecoops"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Modern replacement service (Prompt 4). Self-contained; no DB/legacy/oracle.
+  modern:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.modern
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health').status==200 else 1)\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  devsecoops_pgdata:

@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>DevSecOops — Investigation Console</title>
+<style>
+  :root{--bg:#0b0f17;--panel:#131a26;--line:#223047;--txt:#e6edf6;--mut:#8aa0bd;
+        --ok:#39d98a;--warn:#ffcc66;--bad:#ff6b6b;--acc:#6aa6ff;}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+  header{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;
+    align-items:baseline;gap:14px}
+  h1{font-size:18px;margin:0;letter-spacing:.5px}
+  .sub{color:var(--mut);font-size:12px}
+  main{max-width:1100px;margin:0 auto;padding:22px;display:grid;gap:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);margin:0 0 12px}
+  button{background:var(--acc);color:#04121f;border:0;border-radius:7px;padding:9px 14px;
+    font:inherit;font-weight:600;cursor:pointer}
+  button.ghost{background:transparent;color:var(--acc);border:1px solid var(--line)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--mut);font-weight:600}
+  code{color:var(--acc)} .mono{font-family:ui-monospace,monospace}
+  .pill{padding:2px 8px;border-radius:20px;font-size:11px;border:1px solid var(--line)}
+  .s-succeeded{color:var(--ok);border-color:var(--ok)}
+  .s-running{color:var(--warn);border-color:var(--warn)}
+  .s-failed{color:var(--bad);border-color:var(--bad)}
+  .s-queued{color:var(--mut)}
+  pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:12px;
+    overflow:auto;max-height:280px;font-size:12px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .hash{color:var(--mut);font-size:11px;word-break:break-all}
+  a{color:var(--acc)}
+</style>
+</head>
+<body>
+<header>
+  <h1>DevSecOops</h1>
+  <span class="sub">Financial Legacy Intelligence — Investigation Console · Prompt 1 slice</span>
+</header>
+<main>
+  <div class="card">
+    <h2>Ingestion</h2>
+    <div class="row">
+      <button id="seed">▶ Run known synthetic demo fixture</button>
+      <button class="ghost" id="refresh">↻ Refresh</button>
+      <span class="sub" id="status"></span>
+    </div>
+    <p class="sub" style="margin:12px 0 0">
+      Loads the compiled synthetic excess-of-loss binary + sample claims, then queues a
+      real restricted execution. Every value below is read from Postgres and the
+      immutable execution store — no simulated progress.</p>
+  </div>
+
+  <div class="card">
+    <h2>Artifacts</h2>
+    <table><thead><tr><th>ID</th><th>File</th><th>Type</th><th>Size</th><th>SHA-256</th></tr></thead>
+    <tbody id="artifacts"></tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>Jobs / Timeline</h2>
+    <table><thead><tr><th>Job</th><th>State</th><th>Artifact</th><th>Execution</th></tr></thead>
+    <tbody id="jobs"></tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>Investigation — business-rule archaeology</h2>
+    <div class="row">
+      <button id="investigate">🔬 Investigate latest artifact (source-blind)</button>
+      <span class="sub" id="istatus"></span>
+    </div>
+    <div id="recon" class="sub" style="margin-top:10px"></div>
+    <div id="hyps" style="margin-top:12px"></div>
+    <div id="verify" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Red-team — the Oops</h2>
+    <div class="row">
+      <button id="redteam">🛡 Red-team latest artifact (authorized, synthetic)</button>
+      <span class="sub" id="rtstatus"></span>
+    </div>
+    <div id="findings" style="margin-top:12px"></div>
+    <div id="attempts" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Verified modernization — Track A (vs legacy) · Track B (vs oracle)</h2>
+    <div class="row">
+      <button id="compare">⚖ Build modern replacement & compare</button>
+      <span class="sub" id="cmpstatus"></span>
+    </div>
+    <div id="cmp" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Execution Evidence</h2>
+    <div id="evidence"><span class="sub">Select an execution above.</span></div>
+  </div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const api=(p,o)=>fetch(p,o).then(r=>r.json());
+function pill(s){return `<span class="pill s-${s}">${s}</span>`}
+async function load(){
+  const arts=await api('/api/artifacts');
+  $('#artifacts').innerHTML=arts.map(a=>`<tr>
+    <td class="mono">${a.id}</td><td>${a.filename}</td><td>${a.media_type}</td>
+    <td>${a.size_bytes}</td><td class="hash">${a.sha256}</td></tr>`).join('')||
+    '<tr><td colspan=5 class="sub">none yet</td></tr>';
+  const jobs=await api('/api/jobs');
+  $('#jobs').innerHTML=jobs.map(j=>`<tr>
+    <td class="mono">${j.id}</td><td>${pill(j.state)}</td>
+    <td class="mono">${j.artifact_id}</td>
+    <td>${j.execution_id?`<a href="#" onclick="showExec('${j.execution_id}');return false">${j.execution_id}</a>`:'—'}</td>
+    </tr>`).join('')||'<tr><td colspan=4 class="sub">none yet</td></tr>';
+}
+async function showExec(id){
+  const e=await api('/api/executions/'+id);
+  const iso=e.isolation;
+  $('#evidence').innerHTML=`
+    <div class="row"><code>${e.id}</code> ${pill(e.status)}
+      <span class="sub">exit=${e.exit_code} · ${e.duration_ms}ms · timed_out=${e.timed_out}</span></div>
+    <p class="sub">artifact ${e.artifact_sha256.slice(0,16)}… · stdout sha ${(e.stdout_sha256||'').slice(0,16)}…</p>
+    <p class="sub">isolation: ${iso.engine} · net=${iso.network} · user=${iso.user} ·
+       caps=${iso.cap_drop} · mem=${iso.memory_bytes}B · cpus=${iso.cpus} · ro_rootfs=${iso.read_only_rootfs}</p>
+    <h2>stdout</h2><pre>${(e.stdout||'').replace(/</g,'&lt;')}</pre>
+    ${e.stderr?`<h2>stderr</h2><pre>${e.stderr.replace(/</g,'&lt;')}</pre>`:''}`;
+}
+$('#seed').onclick=async()=>{
+  $('#status').textContent='seeding…';
+  await api('/api/demo/seed',{method:'POST'});
+  setTimeout(()=>{load();$('#status').textContent='demo queued';},800);
+};
+$('#refresh').onclick=load;
+
+async function renderHyps(artifactId){
+  const hs=await api('/api/artifacts/'+artifactId+'/hypotheses');
+  $('#hyps').innerHTML='<table><thead><tr><th>Status</th><th>Conf</th><th>Rule</th>'
+    +'<th>Evidence</th></tr></thead><tbody>'+hs.map(h=>`<tr>
+      <td>${pill(h.status)}</td><td>${h.confidence}</td>
+      <td><code>${h.formula_name}</code><br><span class="sub">${h.statement}</span>
+        <br><span class="sub">${h.rationale||''}</span></td>
+      <td class="sub">${(h.supporting_observation_ids.length||0)} obs ·
+        ${(h.refuting_observation_ids.length||0)} refuting</td>
+      ${h.status==='submitted'?`<td><button class="ghost" onclick="verifyHyp('${h.id}')">verify (blinded)</button></td>`:'<td></td>'}
+    </tr>`).join('')+'</tbody></table>';
+}
+async function verifyHyp(id){
+  $('#verify').innerHTML='<span class="sub">running blinded verification…</span>';
+  const v=await api('/api/hypotheses/'+id+'/verify',{method:'POST'});
+  $('#verify').innerHTML=`<div class="row"><b>Blinded verification</b>
+    <span class="pill ${v.precision>=1?'s-succeeded':'s-failed'}">precision ${v.precision}</span>
+    <span class="sub">${v.matches}/${v.num_cases} cases · ${v.mismatches.length} mismatch(es)</span></div>
+    <p class="sub">${v.coverage}</p>
+    <p class="sub">⚠ ${v.unresolved_uncertainty}</p>
+    <p class="hash">oracle_ref: ${v.oracle_ref}</p>`;
+}
+function renderOops(r){
+  const sevCls={critical:'s-failed',high:'s-failed',medium:'s-running',low:'s-queued'};
+  $('#findings').innerHTML = r.findings.length ? r.findings.map(f=>`
+    <div class="card" style="background:#0a0e15">
+      <div class="row"><b>${f.title}</b>
+        <span class="pill ${sevCls[f.severity]||''}">${f.severity}</span>
+        <span class="sub">confidence ${f.confidence}</span></div>
+      <table style="margin-top:8px">
+        <tr><th>Trigger</th><td class="mono">${f.triggering_input}</td></tr>
+        <tr><th>Observed</th><td>${f.observed_output}</td></tr>
+        <tr><th>Expected (oracle)</th><td>${f.expected_output}</td></tr>
+        <tr><th>Discrepancy</th><td>${f.discrepancy}</td></tr>
+        <tr><th>Root cause</th><td>${f.root_cause_hypothesis}</td></tr>
+        <tr><th>Business impact</th><td>${f.business_impact}</td></tr>
+        <tr><th>Remediation</th><td>${f.remediation}</td></tr>
+        <tr><th>Regression test</th><td class="mono">${f.regression_test_path||'—'}</td></tr>
+        <tr><th>Reproduce</th><td class="sub">${f.reproduction.steps.join(' → ')}</td></tr>
+        <tr><th>Evidence</th><td class="hash">executions ${(f.reproduction.execution_ids||[]).join(', ')}</td></tr>
+      </table>
+    </div>`).join('') : '<span class="sub">No verified Oops yet — run red-team.</span>';
+  $('#attempts').innerHTML='<h2>Red-team attempts (incl. unsuccessful)</h2>'
+    +'<table><thead><tr><th>Class</th><th>Outcome</th><th>Inputs</th><th>Note</th></tr></thead><tbody>'
+    +r.attempts.map(a=>`<tr><td>${a.attack_class}</td>
+      <td>${pill(a.outcome==='no_discrepancy'?'succeeded':'failed')} ${a.outcome}</td>
+      <td class="sub">${a.inputs_summary}</td><td class="sub">${a.note||''}</td></tr>`).join('')
+    +'</tbody></table>';
+}
+function clsPill(rel){
+  const m={verified:'s-succeeded',approved_divergence:'s-running',
+    pending_approval:'s-running',rejected:'s-failed',unresolved:'s-queued'};
+  return `<span class="pill ${m[rel]||''}">${rel}</span>`;
+}
+function renderCmp(r){
+  const rows=r.cases.map(c=>`<tr>
+    <td class="mono">${c.eligible_loss}</td><td>${c.legacy??'—'}</td>
+    <td>${c.modern}</td><td>${c.oracle}</td>
+    <td>${c.track_a_compatible?'✓':'✗'}</td><td>${c.track_b_correct?'✓':'✗'}</td>
+    <td>${c.classification}<br>${clsPill(c.release_status)}
+      ${c.note?`<br><span class="sub">${c.note}</span>`:''}</td></tr>`).join('');
+  $('#cmp').innerHTML=`
+    <div class="row sub">release: ${Object.entries(r.release_counts).map(([k,v])=>k+'='+v).join(' · ')}</div>
+    <table style="margin-top:8px"><thead><tr><th>eligible</th><th>legacy</th>
+      <th>modern</th><th>oracle</th><th>A</th><th>B</th><th>classification / release</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    ${r.approved_divergences.map(d=>`<p class="sub">⚑ approved divergence <b>${d.id}</b>
+       (${d.status}) — ${d.description}</p>`).join('')}
+    <p class="sub">${r.disclaimer}</p>
+    <p class="hash">report artifact: ${r.report_path}</p>`;
+}
+$('#compare').onclick=async()=>{
+  const arts=await api('/api/artifacts');
+  if(!arts.length){$('#cmpstatus').textContent='ingest an artifact first';return;}
+  $('#cmpstatus').textContent='building modern service & running differential…';
+  const r=await api('/api/artifacts/'+arts[0].id+'/compare',{method:'POST'});
+  $('#cmpstatus').textContent='done';
+  renderCmp(r);
+};
+$('#redteam').onclick=async()=>{
+  const arts=await api('/api/artifacts');
+  if(!arts.length){$('#rtstatus').textContent='ingest + investigate first';return;}
+  $('#rtstatus').textContent='running authorized adversarial tests in the sandbox… (~10s)';
+  const r=await api('/api/artifacts/'+arts[0].id+'/redteam',{method:'POST'});
+  $('#rtstatus').textContent=r.findings.length?`${r.findings.length} verified Oops`:'no Oops verified';
+  renderOops(r);
+};
+$('#investigate').onclick=async()=>{
+  const arts=await api('/api/artifacts');
+  if(!arts.length){$('#istatus').textContent='ingest an artifact first';return;}
+  const id=arts[0].id;
+  $('#istatus').textContent='running real experiments in the sandbox… (~5s)';
+  const ai=await api('/api/ai/status');
+  const r=await api('/api/artifacts/'+id+'/investigate',{method:'POST'});
+  const m=await api('/api/artifacts/'+id+'/inspect');
+  $('#recon').innerHTML=`recon (LIEF): ${m.fmt} ${m.machine} · symbols=${m.num_symbols}
+    · notable symbols <code>${m.notable_symbols.join(', ')}</code>
+    · strings <code>${m.notable_strings.slice(0,4).join(' | ')}</code>
+    <br>AI narration: ${ai.available?ai.provider:'unavailable (deterministic baseline ran in full)'}
+    <br>coverage: ${r.coverage}`;
+  $('#istatus').textContent='done';
+  renderHyps(id);
+};
+load(); setInterval(load,2000);
+</script>
+</body>
+</html>

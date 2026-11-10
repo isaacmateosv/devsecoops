@@ -1,0 +1,21 @@
+{
+  "artifact": "xol_calc",
+  "treaty": {
+    "type": "per_occurrence_excess_of_loss_single_layer",
+    "currency": "USD",
+    "attachment": "100000.00",
+    "limit": "500000.00",
+    "formula": "recovery = min(max(eligible_loss - attachment, 0), limit)",
+    "rounding": "half_up_to_cent"
+  },
+  "seeded_defects": [
+    {
+      "id": "OOPS-001",
+      "class": "integer_overflow",
+      "summary": "Monetary cents stored in 32-bit int; eligible_loss above $21,474,836.47 overflows, producing a wrong/negative recovery instead of the $500,000.00 limit cap.",
+      "trigger_threshold_eligible_loss": "21474836.48",
+      "disclosure": "HIDDEN from investigation agents; must be found via black-box testing of large values."
+    }
+  ],
+  "note": "This file is the evaluator's scoring key. It is never exposed to the investigation or runner environment."
+}

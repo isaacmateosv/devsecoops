@@ -1,0 +1,30 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: devsecoops
+          POSTGRES_PASSWORD: devsecoops
+          POSTGRES_DB: devsecoops
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U devsecoops"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://devsecoops:devsecoops@localhost:5433/devsecoops
+      RUNNER_IMAGE: debian:bookworm-slim
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r apps/api/requirements.txt
+      - name: Build synthetic legacy binary (linux/amd64 on CI)
+        run: |
+          docker run --rm -v "$PWD/evaluation-private/legacy-source":/src -w /src \
+            gcc:14-bookworm cc -O0 -static -o /src/xol_calc xol_calc.c
+          mkdir -p demo/artifacts && cp evaluation-private/legacy-source/xol_calc demo/artifacts/xol_calc
+      - run: python -m pytest
